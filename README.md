@@ -61,5 +61,3 @@ By exposing candidate names and vote totals on-chain and enabling wallet-signed 
 **Notes**
 - The UI disables voting actions when the connected address has already voted or if the contract address is not properly configured.
 - Transactions may take a short time to confirm depending on network conditions; the UI displays transaction status and hash for user reference.
-
-
