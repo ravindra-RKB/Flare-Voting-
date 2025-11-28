@@ -7,6 +7,7 @@ Explorer: https://coston2-explorer.flare.network/address/0xe5B0EF1B433d844C57767
 ![Uploading image.png…]()
 
 
+
 ## Description
 This repository provides a minimal, beginner-friendly front-end integration for an on-chain **voting** smart contract deployed at the address above. The contract exposes a predefined list of candidates (set in the contract constructor) and allows each wallet address to cast a single vote for a candidate by name.
 
