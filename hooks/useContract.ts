@@ -1,0 +1,113 @@
+// hooks/useContract.ts
+"use client"
+
+import { useState, useEffect } from "react"
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi"
+import { contractABI, contractAddress } from "@/lib/contract"
+
+export interface VotingData {
+  candidatesCount: number
+  hasVoted: boolean
+}
+
+export interface ContractState {
+  isLoading: boolean
+  isPending: boolean
+  isConfirming: boolean
+  isConfirmed: boolean
+  hash: `0x${string}` | undefined
+  error: Error | null
+}
+
+export interface ContractActions {
+  vote: (candidate: string) => Promise<void>
+}
+
+export const useVotingContract = () => {
+  const { address } = useAccount()
+  const [isLoading, setIsLoading] = useState(false)
+
+  const isContractSet = !!contractAddress
+
+  const { data: rawCandidatesCount, refetch: refetchCandidatesCount } = useReadContract({
+    address: isContractSet ? (contractAddress as `0x${string}`) : undefined,
+    abi: contractABI,
+    functionName: "getCandidatesCount",
+  } as any)
+
+  const { data: rawHasVoted, refetch: refetchHasVoted } = useReadContract({
+    address: isContractSet ? (contractAddress as `0x${string}`) : undefined,
+    abi: contractABI,
+    functionName: "hasVoted",
+    args: [address as `0x${string}`],
+    query: {
+      enabled: !!address && !!isContractSet,
+    },
+  } as any)
+
+  const { writeContractAsync, data: writeData, error, isPending } = useWriteContract()
+
+  const hash = (writeData && (writeData as any).hash) ? (writeData as any).hash : (writeData as any)
+
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  } as any)
+
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchCandidatesCount && refetchCandidatesCount()
+      refetchHasVoted && refetchHasVoted()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed])
+
+  const vote = async (candidate: string) => {
+    if (!candidate) return
+    if (!isContractSet) throw new Error("Contract address not set")
+
+    try {
+      setIsLoading(true)
+      await writeContractAsync({
+        address: contractAddress as `0x${string}`,
+        abi: contractABI,
+        functionName: "vote",
+        args: [candidate],
+      })
+    } catch (err: any) {
+      console.error("Error voting:", err)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const data: VotingData = {
+    candidatesCount: rawCandidatesCount ? Number(rawCandidatesCount as bigint) : 0,
+    hasVoted: (rawHasVoted as boolean) ?? false,
+  }
+
+  const actions: ContractActions = {
+    vote,
+  }
+
+  const state: ContractState = {
+    isLoading: isLoading || isPending || isConfirming,
+    isPending,
+    isConfirming,
+    isConfirmed,
+    hash,
+    error: error ?? null,
+  }
+
+  return {
+    data,
+    actions,
+    state,
+    refetch: {
+      candidatesCount: refetchCandidatesCount,
+      hasVoted: refetchHasVoted,
+    },
+  }
+}
+
+export default useVotingContract

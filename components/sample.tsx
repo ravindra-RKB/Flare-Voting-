@@ -1,0 +1,164 @@
+// components/sample.tsx
+"use client"
+
+import { useMemo, useState } from "react"
+import { useAccount, useReadContract } from "wagmi"
+import useVotingContract from "@/hooks/useContract"
+import { contractABI, contractAddress } from "@/lib/contract"
+
+type CandidateRowProps = {
+  index: number
+  onVote: (candidate: string) => Promise<void>
+  disabled: boolean
+}
+
+const CandidateRow = ({ index, onVote, disabled }: CandidateRowProps) => {
+  const { data: candidateName } = useReadContract({
+    address: contractAddress as `0x${string}`,
+    abi: contractABI,
+    functionName: "candidates",
+    args: [BigInt(index)],
+  } as any)
+
+  const nameStr = (candidateName as string) ?? ""
+
+  const { data: votesCount } = useReadContract({
+    address: contractAddress as `0x${string}`,
+    abi: contractABI,
+    functionName: "votes",
+    args: [nameStr || ""],
+  } as any)
+
+  const numericVotes = votesCount ? Number(votesCount as bigint) : 0
+
+  return (
+    <div className="flex items-center justify-between gap-4 p-3 bg-card border border-border rounded-lg">
+      <div>
+        <p className="font-medium text-foreground">{nameStr || `Candidate #${index}`}</p>
+        <p className="text-sm text-muted-foreground">{numericVotes} votes</p>
+      </div>
+      <div>
+        <button
+          disabled={disabled || !nameStr}
+          onClick={() => onVote(nameStr)}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Vote
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const SampleIntregation = () => {
+  const { isConnected } = useAccount()
+  const { data, actions, state } = useVotingContract()
+  const [customCandidate, setCustomCandidate] = useState("")
+
+  const isContractDeployed = useMemo(() => !!contractAddress, [])
+
+  const handleVoteForInput = async () => {
+    if (!customCandidate) return
+    try {
+      await actions.vote(customCandidate)
+      setCustomCandidate("")
+    } catch (err) {
+      console.error("Error voting:", err)
+    }
+  }
+
+  const handleVote = async (candidate: string) => {
+    try {
+      await actions.vote(candidate)
+    } catch (err) {
+      console.error("Error voting:", err)
+    }
+  }
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <h2 className="text-2xl font-bold text-foreground mb-3">Simple Voting</h2>
+          <p className="text-muted-foreground">Please connect your wallet to participate in the vote.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const canVote = isContractDeployed && !data.hasVoted
+
+  return (
+    <div className="min-h-screen bg-background p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground">Simple Voting DApp</h1>
+          <p className="text-muted-foreground mt-1">Cast a vote for your preferred candidate. Each address can vote once.</p>
+        </div>
+
+        {!isContractDeployed && (
+          <div className="mb-6 p-4 rounded-lg bg-yellow-50 border border-yellow-200">
+            <p className="text-sm text-yellow-700">
+              Contract address is not configured correctly. Voting is disabled until a valid contract address is set.
+            </p>
+          </div>
+        )}
+
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Candidates</p>
+            <p className="text-2xl font-semibold text-foreground mt-2">{data.candidatesCount}</p>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Your Voting Status</p>
+            <p className="text-2xl font-semibold text-foreground mt-2">{data.hasVoted ? "Already Voted" : "Not Voted"}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          {Array.from({ length: data.candidatesCount }).map((_, i) => (
+            <CandidateRow key={i} index={i} onVote={handleVote} disabled={!canVote || state.isLoading || state.isPending} />
+          ))}
+
+          <div className="p-4 bg-card border border-border rounded-lg">
+            <p className="text-sm text-muted-foreground mb-2">Or vote by entering a candidate name</p>
+            <div className="flex gap-2">
+              <input
+                value={customCandidate}
+                onChange={(e) => setCustomCandidate(e.target.value)}
+                placeholder="Candidate name"
+                className="flex-1 px-3 py-2 bg-card border border-border rounded-md focus:outline-none"
+              />
+              <button
+                onClick={handleVoteForInput}
+                disabled={!canVote || !customCandidate || state.isLoading || state.isPending}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {state.isLoading || state.isPending ? "Submitting..." : "Vote"}
+              </button>
+            </div>
+            {!canVote && <p className="text-xs text-destructive mt-2">You have already voted or voting is disabled.</p>}
+          </div>
+        </div>
+
+        {state.hash && (
+          <div className="mt-4 p-4 bg-card border border-border rounded-lg">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Transaction Hash</p>
+            <p className="text-sm font-mono text-foreground break-all mb-3">{state.hash}</p>
+            {state.isConfirming && <p className="text-sm text-primary">Waiting for confirmation...</p>}
+            {state.isConfirmed && <p className="text-sm text-green-500">Transaction confirmed!</p>}
+          </div>
+        )}
+
+        {state.error && (
+          <div className="mt-4 p-4 bg-card border border-destructive rounded-lg">
+            <p className="text-sm text-destructive-foreground">Error: {state.error.message}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default SampleIntregation
